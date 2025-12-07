@@ -1,4 +1,4 @@
-# Overview
+# Overview [LIVE URL](https://truestate-assignement.netlify.app/)
 - Retail Sales Management System with a MongoDB-backed API and React UI for TruEstate assignment.
 - Implements search, filters, sorting, pagination, and rollup summaries across customer, product, and sales attributes.
 - Dataset is seeded into MongoDB from `backend/data/truestate_assignment_dataset.csv`.
