@@ -10,7 +10,9 @@ const { setSalesData } = require('./services/salesService');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+// express CORS
+app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+
 app.use(express.json());
 app.use(morgan('dev'));
 
