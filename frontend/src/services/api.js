@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
 const buildQuery = (params = {}) => {
   const searchParams = new URLSearchParams();
@@ -28,7 +28,7 @@ const buildQuery = (params = {}) => {
 
 export const fetchSales = async (params) => {
   const query = buildQuery(params);
-  const url = `${API_BASE}/sales${query ? `?${query}` : ''}`;
+  const url = `${API_BASE}/api/sales${query ? `?${query}` : ''}`;
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Failed to fetch sales data');
@@ -37,7 +37,7 @@ export const fetchSales = async (params) => {
 };
 
 export const fetchOptions = async () => {
-  const response = await fetch(`${API_BASE}/sales/options`);
+  const response = await fetch(`${API_BASE}/api/sales/options`);
   if (!response.ok) {
     throw new Error('Failed to load filter metadata');
   }

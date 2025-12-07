@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
-const morgan = require('morgan');
+const morgan = 'morgan';
+const connectDB = require('./utils/db');
+
 
 const salesRoutes = require('./routes/salesRoutes');
 
@@ -11,7 +13,7 @@ const PORT = process.env.PORT || 4000;
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 
 app.use(express.json());
-app.use(morgan('dev'));
+
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -25,8 +27,8 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: 'Unexpected server error' });
 });
 
-const start = () => {
-
+const start = async () => {
+  await connectDB();
   app.listen(PORT, () => {
     console.log(`API server running on http://localhost:${PORT}`);
   });
