@@ -1,93 +1,42 @@
-let salesData = [];
-let cachedOptions = null;
+const Sale = require('../models/Sale');
+
 const PAGE_SIZE = 10;
 
-const normalizeList = (value) => {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    return value
-      .split(',')
-      .map((v) => v.trim())
-      .filter(Boolean);
-  }
-  return [];
+const getOptions = async () => {
+  const [options] = await Sale.aggregate([
+    {
+      $facet: {
+        regions: [{ $group: { _id: '$customerRegion' } }, { $sort: { _id: 1 } }],
+        genders: [{ $group: { _id: '$gender' } }, { $sort: { _id: 1 } }],
+        productCategories: [{ $group: { _id: '$productCategory' } }, { $sort: { _id: 1 } }],
+        tags: [{ $unwind: '$tags' }, { $group: { _id: '$tags' } }, { $sort: { _id: 1 } }],
+        paymentMethods: [{ $group: { _id: '$paymentMethod' } }, { $sort: { _id: 1 } }],
+        ageRange: [{ $group: { _id: null, min: { $min: '$age' }, max: { $max: '$age' } } }],
+        dateRange: [{ $group: { _id: null, min: { $min: '$date' }, max: { $max: '$date' } } }],
+      },
+    },
+    {
+      $project: {
+        regions: '$regions._id',
+        genders: '$genders._id',
+        productCategories: '$productCategories._id',
+        tags: '$tags._id',
+        paymentMethods: '$paymentMethods._id',
+        ageRange: {
+          min: { $arrayElemAt: ['$ageRange.min', 0] },
+          max: { $arrayElemAt: ['$ageRange.max', 0] },
+        },
+        dateRange: {
+          min: { $dateToString: { format: '%Y-%m-%d', date: { $arrayElemAt: ['$dateRange.min', 0] } } },
+          max: { $dateToString: { format: '%Y-%m-%d', date: { $arrayElemAt: ['$dateRange.max', 0] } } },
+        },
+      },
+    },
+  ]);
+  return options;
 };
 
-const toLowerSet = (list) => new Set(normalizeList(list).map((v) => v.toLowerCase()));
-
-const safeNumber = (value) => {
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-};
-
-const parseDate = (value) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const setSalesData = (data) => {
-  salesData = data;
-  cachedOptions = null;
-};
-
-const getOptions = () => {
-  if (cachedOptions) return cachedOptions;
-
-  const sets = {
-    regions: new Set(),
-    genders: new Set(),
-    productCategories: new Set(),
-    tags: new Set(),
-    paymentMethods: new Set()
-  };
-
-  let minAge = Infinity;
-  let maxAge = -Infinity;
-  let minDate = null;
-  let maxDate = null;
-
-  salesData.forEach((item) => {
-    if (item.customerRegion) sets.regions.add(item.customerRegion);
-    if (item.gender) sets.genders.add(item.gender);
-    if (item.productCategory) sets.productCategories.add(item.productCategory);
-    if (item.paymentMethod) sets.paymentMethods.add(item.paymentMethod);
-    (item.tags || []).forEach((tag) => sets.tags.add(tag));
-
-    if (typeof item.age === 'number') {
-      minAge = Math.min(minAge, item.age);
-      maxAge = Math.max(maxAge, item.age);
-    }
-
-    if (item.date) {
-      const d = parseDate(item.date);
-      if (d) {
-        minDate = !minDate || d < minDate ? d : minDate;
-        maxDate = !maxDate || d > maxDate ? d : maxDate;
-      }
-    }
-  });
-
-  cachedOptions = {
-    regions: Array.from(sets.regions).sort(),
-    genders: Array.from(sets.genders).sort(),
-    productCategories: Array.from(sets.productCategories).sort(),
-    tags: Array.from(sets.tags).sort(),
-    paymentMethods: Array.from(sets.paymentMethods).sort(),
-    ageRange:
-      Number.isFinite(minAge) && Number.isFinite(maxAge)
-        ? { min: minAge, max: maxAge }
-        : { min: null, max: null },
-    dateRange: {
-      min: minDate ? minDate.toISOString().slice(0, 10) : null,
-      max: maxDate ? maxDate.toISOString().slice(0, 10) : null
-    }
-  };
-
-  return cachedOptions;
-};
-
-const querySales = (params = {}) => {
+const querySales = async (params = {}) => {
   const {
     searchTerm = '',
     customerRegions,
@@ -101,123 +50,96 @@ const querySales = (params = {}) => {
     dateTo,
     sortBy = 'date',
     sortOrder,
-    page = 1
+    page = 1,
   } = params;
 
-  const regionSet = toLowerSet(customerRegions);
-  const genderSet = toLowerSet(genders);
-  const categorySet = toLowerSet(productCategories);
-  const tagSet = toLowerSet(tags);
-  const paymentSet = toLowerSet(paymentMethods);
+  const match = {};
 
-  const query = searchTerm.trim().toLowerCase();
-
-  let minAge = safeNumber(ageMin);
-  let maxAge = safeNumber(ageMax);
-  if (minAge !== null && maxAge !== null && minAge > maxAge) {
-    [minAge, maxAge] = [maxAge, minAge];
+  if (searchTerm) {
+    match.$or = [
+      { customerName: { $regex: searchTerm, $options: 'i' } },
+      { phoneNumber: { $regex: searchTerm, $options: 'i' } },
+    ];
   }
 
-  let startDate = parseDate(dateFrom);
-  let endDate = parseDate(dateTo);
-  if (startDate && endDate && startDate > endDate) {
-    [startDate, endDate] = [endDate, startDate];
+  if (customerRegions && customerRegions.length) {
+    match.customerRegion = { $in: customerRegions };
+  }
+  if (genders && genders.length) {
+    match.gender = { $in: genders };
+  }
+  if (productCategories && productCategories.length) {
+    match.productCategory = { $in: productCategories };
+  }
+  if (tags && tags.length) {
+    match.tags = { $in: tags };
+  }
+  if (paymentMethods && paymentMethods.length) {
+    match.paymentMethod = { $in: paymentMethods };
   }
 
-  const filtered = salesData.filter((item) => {
-    if (query) {
-      const nameHit = (item.customerName || '').toLowerCase().includes(query);
-      const phoneHit = (item.phoneNumber || '').toLowerCase().includes(query);
-      if (!nameHit && !phoneHit) return false;
-    }
+  if (ageMin || ageMax) {
+    match.age = {};
+    if (ageMin) match.age.$gte = Number(ageMin);
+    if (ageMax) match.age.$lte = Number(ageMax);
+  }
 
-    if (regionSet.size && !regionSet.has((item.customerRegion || '').toLowerCase())) return false;
-    if (genderSet.size && !genderSet.has((item.gender || '').toLowerCase())) return false;
-    if (categorySet.size && !categorySet.has((item.productCategory || '').toLowerCase())) return false;
-    if (paymentSet.size && !paymentSet.has((item.paymentMethod || '').toLowerCase())) return false;
+  if (dateFrom || dateTo) {
+    match.date = {};
+    if (dateFrom) match.date.$gte = new Date(dateFrom);
+    if (dateTo) match.date.$lte = new Date(dateTo);
+  }
 
-    if (tagSet.size) {
-      const itemTags = (item.tags || []).map((t) => t.toLowerCase());
-      const hasMatch = itemTags.some((t) => tagSet.has(t));
-      if (!hasMatch) return false;
-    }
-
-    if (minAge !== null || maxAge !== null) {
-      const ageValue = typeof item.age === 'number' ? item.age : null;
-      if (ageValue === null) return false;
-      if (minAge !== null && ageValue < minAge) return false;
-      if (maxAge !== null && ageValue > maxAge) return false;
-    }
-
-    if (startDate || endDate) {
-      const rowDate = parseDate(item.date);
-      if (!rowDate) return false;
-      if (startDate && rowDate < startDate) return false;
-      if (endDate && rowDate > endDate) return false;
-    }
-
-    return true;
-  });
-
+  const sort = {};
   const effectiveSort =
     sortBy === 'quantity' || sortBy === 'customerName' || sortBy === 'date' ? sortBy : 'date';
-
-  const resolvedOrder =
-    sortOrder || (effectiveSort === 'customerName' ? 'asc' : 'desc');
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (effectiveSort === 'customerName') {
-      return resolvedOrder === 'asc'
-        ? (a.customerName || '').localeCompare(b.customerName || '')
-        : (b.customerName || '').localeCompare(a.customerName || '');
-    }
-
-    if (effectiveSort === 'quantity') {
-      return resolvedOrder === 'asc'
-        ? (a.quantity || 0) - (b.quantity || 0)
-        : (b.quantity || 0) - (a.quantity || 0);
-    }
-
-    const aDate = parseDate(a.date);
-    const bDate = parseDate(b.date);
-    const aTime = aDate ? aDate.getTime() : 0;
-    const bTime = bDate ? bDate.getTime() : 0;
-    return resolvedOrder === 'asc' ? aTime - bTime : bTime - aTime;
-  });
+  const resolvedOrder = sortOrder === 'asc' ? 1 : -1;
+  sort[effectiveSort] = resolvedOrder;
 
   const safePage = Math.max(1, Number(page) || 1);
-  const safeSize = PAGE_SIZE;
-  const total = sorted.length;
-  const totalPages = Math.max(1, Math.ceil(total / safeSize));
-  const offset = (safePage - 1) * safeSize;
-  const data = sorted.slice(offset, offset + safeSize);
+  const offset = (safePage - 1) * PAGE_SIZE;
 
-  const summary = sorted.reduce(
-    (acc, item) => {
-      acc.totalUnits += Number.isFinite(item.quantity) ? item.quantity : 0;
-      acc.totalAmount += Number.isFinite(item.totalAmount) ? item.totalAmount : 0;
-      const discount =
-        Number.isFinite(item.totalAmount) && Number.isFinite(item.finalAmount)
-          ? item.totalAmount - item.finalAmount
-          : 0;
-      acc.totalDiscount += discount;
-      return acc;
+  const [results] = await Sale.aggregate([
+    { $match: match },
+    {
+      $facet: {
+        data: [{ $sort: sort }, { $skip: offset }, { $limit: PAGE_SIZE }],
+        total: [{ $count: 'count' }],
+        summary: [
+          {
+            $group: {
+              _id: null,
+              totalUnits: { $sum: '$quantity' },
+              totalAmount: { $sum: '$totalAmount' },
+              totalDiscount: { $sum: { $subtract: ['$totalAmount', '$finalAmount'] } },
+            },
+          },
+        ],
+      },
     },
-    { totalUnits: 0, totalAmount: 0, totalDiscount: 0 }
-  );
+  ]);
+
+  const { data, total, summary } = results;
+  const totalRecords = total.length > 0 ? total[0].count : 0;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
+  const summaryData = summary.length > 0 ? summary[0] : { totalUnits: 0, totalAmount: 0, totalDiscount: 0 };
+
 
   return {
     data,
     page: safePage,
-    pageSize: safeSize,
-    total,
+    pageSize: PAGE_SIZE,
+    total: totalRecords,
     totalPages,
-    summary
+    summary: {
+      totalUnits: summaryData.totalUnits,
+      totalAmount: summaryData.totalAmount,
+      totalDiscount: summaryData.totalDiscount,
+    },
   };
 };
 
 module.exports = {
-  setSalesData,
   getOptions,
-  querySales
+  querySales,
 };

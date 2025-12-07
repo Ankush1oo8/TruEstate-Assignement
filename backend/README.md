@@ -1,12 +1,13 @@
 ## Backend
 
-Express API that loads the provided CSV once at startup and exposes `/api/sales` with search, filters, sorting, and pagination, plus `/api/sales/options` for filter metadata.
+Express API backed by MongoDB that exposes `/api/sales` with search, filters, sorting, pagination, and rollup summaries, plus `/api/sales/options` for filter metadata. Seed MongoDB from `data/truestate_assignment_dataset.csv` via `npm run seed`.
 
 ### Run locally
 
 ```bash
 cd backend
 npm install
+npm run seed   # populate MongoDB once
 npm run dev
 ```
 

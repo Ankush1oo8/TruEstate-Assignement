@@ -12,47 +12,58 @@ const parseList = (value) => {
   return [];
 };
 
-const getSales = (req, res) => {
-  const {
-    search,
-    customerRegion,
-    gender,
-    productCategory,
-    tags,
-    paymentMethod,
-    ageMin,
-    ageMax,
-    dateFrom,
-    dateTo,
-    sortBy,
-    sortOrder,
-    page
-  } = req.query;
+const getSales = async (req, res) => {
+  try {
+    const {
+      search,
+      customerRegion,
+      gender,
+      productCategory,
+      tags,
+      paymentMethod,
+      ageMin,
+      ageMax,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      page,
+    } = req.query;
 
-  const result = querySales({
-    searchTerm: search,
-    customerRegions: parseList(customerRegion),
-    genders: parseList(gender),
-    productCategories: parseList(productCategory),
-    tags: parseList(tags),
-    paymentMethods: parseList(paymentMethod),
-    ageMin,
-    ageMax,
-    dateFrom,
-    dateTo,
-    sortBy,
-    sortOrder,
-    page
-  });
+    const result = await querySales({
+      searchTerm: search,
+      customerRegions: parseList(customerRegion),
+      genders: parseList(gender),
+      productCategories: parseList(productCategory),
+      tags: parseList(tags),
+      paymentMethods: parseList(paymentMethod),
+      ageMin,
+      ageMax,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      page,
+    });
 
-  res.json(result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in getSales:', error);
+    res.status(500).json({ message: 'Error fetching sales data' });
+  }
 };
 
-const getSalesOptions = (_req, res) => {
-  res.json(getOptions());
+const getSalesOptions = async (_req, res) => {
+  try {
+    const options = await getOptions();
+    res.json(options);
+  } catch (error) {
+    console.error('Error in getSalesOptions:', error);
+    res.status(500).json({ message: 'Error fetching sales options' });
+  }
 };
 
 module.exports = {
   getSales,
-  getSalesOptions
+  getSalesOptions,
 };
